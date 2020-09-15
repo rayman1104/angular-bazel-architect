@@ -1,4 +1,6 @@
 load("@npm//@angular-devkit/architect-cli:index.bzl", "architect", "architect_test")
+load("@build_bazel_rules_nodejs//:index.bzl", "copy_to_bin")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 
 # These dependencies are needed for any ng command
 filegroup(
@@ -24,14 +26,9 @@ APPLICATION_DEPS = [
     "@npm//typescript",
 ]
 
-architect(
-    name = "build",
-    args = [
-        "frontend:build",
-        "--outputPath=$(@D)",
-    ],
-    configuration_env_vars = ["NG_BUILD_CACHE"],
-    data = glob(
+copy_to_bin(
+    name = "copy_input",
+    srcs = glob(
         [
             "src/**/*",
         ],
@@ -39,9 +36,26 @@ architect(
             "src/**/*.spec.ts",
             "src/test.ts",
         ],
-    ) + APPLICATION_DEPS + [
-        "angular.json",
-        "tsconfig.app.json",
+    ) + ["package.json", "angular.json", "tsconfig.base.json", "tsconfig.app.json"],
+)
+
+write_file(
+    name = "write_chdir_script",
+    out = "chdir.js",
+    content = ["process.chdir(__dirname)"],
+)
+
+architect(
+    name = "build",
+    args = [
+        "buzz:build",
+        "--outputPath=$(@D)",
+        "--node_options=--require=./$(execpath chdir.js)",
+    ],
+    configuration_env_vars = ["NG_BUILD_CACHE"],
+    data = APPLICATION_DEPS + [
+        ":copy_input",
+        "chdir.js",
     ],
     output_dir = True,
 )
